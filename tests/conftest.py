@@ -41,6 +41,9 @@ def _mock_db_time(*, model: Any, time: datetime = datetime(2024, 1, 1)):
         if hasattr(target, 'created_at'):
             target.created_at = time
 
+        if hasattr(target, 'updated_at'):
+            target.updated_at = time
+
     # Adiciona um evento a um model.
     # Executa uma função (Hook)antes de inserir o registro no bando de dados.
     event.listen(model, 'before_insert', fake_time_hook)  # type: ignore

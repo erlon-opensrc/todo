@@ -20,6 +20,7 @@ def test_create_user(session: Session, mock_db_time):  # type: ignore
     new_user_dict = asdict(new_user)
     new_user_dict.update({'id': 1})
     new_user_dict.update({'created_at': time})  # time gerado por mock_db_time
+    new_user_dict.update({'updated_at': time})
 
     assert user is not None
     assert asdict(user) == new_user_dict
