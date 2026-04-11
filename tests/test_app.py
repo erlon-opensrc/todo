@@ -2,6 +2,9 @@ from http import HTTPStatus
 
 from fastapi.testclient import TestClient
 
+from todo.models import User
+from todo.schemas import UserPublic, UserSchema
+
 
 def test_create_user(client: TestClient):
     request_body = {
@@ -16,32 +19,48 @@ def test_create_user(client: TestClient):
         'username': 'Alice',
     }
 
-    response = client.post('/users/', json=request_body)
+    response = client.post('/users', json=request_body)
 
     assert response.status_code == HTTPStatus.CREATED
     assert response.json() == expected_response
 
 
+def test_create_user_conflict_username(client: TestClient, user: User):
+    user_schema = UserSchema.model_validate(user)
+    response = client.post('/users', json=user_schema.model_dump())
+
+    assert response.status_code == HTTPStatus.CONFLICT
+    assert response.json() == {'detail': 'Username already exists'}
+
+
+def test_create_user_conflict_email(client: TestClient, user: User):
+    new_user = UserSchema(
+        username='Alice', email='test@test.com', password='secret'
+    )
+    response = client.post('/users', json=new_user.model_dump())
+
+    assert response.status_code == HTTPStatus.CONFLICT
+    assert response.json() == {'detail': 'Email already exists'}
+
+
 def test_read_users(client: TestClient):
-    response = client.get('/users/')
+    response = client.get('/users')
 
     assert response.status_code == HTTPStatus.OK
-    assert response.json() == {
-        'users': [{'id': 1, 'email': 'alice@example.com', 'username': 'Alice'}]
-    }
+    assert response.json() == {'users': []}
 
 
-def test_read_user(client: TestClient):
-    expected_response: dict[str, str | int] = {
-        'username': 'Alice',
-        'email': 'alice@example.com',
-        'id': 1,
-    }
+def test_read_users_with_users(client: TestClient, user: User):
+    user_schema = UserPublic.model_validate(user).model_dump()
+    response = client.get('/users')
+    assert response.json() == {'users': [user_schema]}
 
+
+def test_read_user(client: TestClient, user: User):
     response = client.get('/users/1')
 
     assert response.status_code == HTTPStatus.OK
-    assert response.json() == expected_response
+    assert response.json() == UserPublic.model_validate(user).model_dump()
 
 
 def test_read_user_not_found(client: TestClient):
@@ -51,7 +70,7 @@ def test_read_user_not_found(client: TestClient):
     assert response.json() == {'detail': 'User not found'}
 
 
-def test_update_user(client: TestClient):
+def test_update_user(client: TestClient, user: User):
     request_body = {
         'username': 'Bob',
         'email': 'bob@example.com',
@@ -83,7 +102,30 @@ def test_updated_user_not_found(client: TestClient):
     assert response.json() == {'detail': 'User not found'}
 
 
-def test_delete_user(client: TestClient):
+def test_update_user_integrity_erro(client: TestClient, user: User):
+    created_user = {
+        'username': 'Fausto',
+        'email': 'fausto@example.com',
+        'password': 'secret',
+    }
+
+    updated_user = {
+        'username': 'Fausto',
+        'email': 'bob@example.com',
+        'password': 'myNewPassword',
+    }
+
+    client.post('/users', json=created_user)
+
+    response_update = client.put(f'/users/{user.id}', json=updated_user)
+
+    assert response_update.status_code == HTTPStatus.CONFLICT
+    assert response_update.json() == {
+        'detail': 'Username or Email already exists'
+    }
+
+
+def test_delete_user(client: TestClient, user: User):
     response = client.delete('/users/1')
 
     assert response.status_code == HTTPStatus.OK
