@@ -1,21 +1,24 @@
 from dataclasses import asdict
 
+import pytest
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from todo.models import User
 
 
-def test_create_user(session: Session, mock_db_time):  # type: ignore
+@pytest.mark.asyncio  # diz ao pytest que esse test contém código assíncrono
+async def test_create_user(session: AsyncSession, mock_db_time):  # type: ignore
     with mock_db_time(model=User) as time:  # type: ignore
         new_user = User(
             username='Alice', email='alice@example.com', password='secret'
         )
 
         session.add(new_user)
-        session.commit()
+        await session.commit()  # categorizado como operação I/O
 
-    user = session.scalar(select(User).where(User.username == 'Alice'))
+    # categorizado como operação I/O (input/output)
+    user = await session.scalar(select(User).where(User.username == 'Alice'))
 
     new_user_dict = asdict(new_user)
     new_user_dict.update({'id': 1})

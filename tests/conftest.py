@@ -1,10 +1,12 @@
 from contextlib import contextmanager
 from datetime import datetime
-from typing import Any, Generator
+from typing import Any, AsyncGenerator, Generator
 
 import pytest
+import pytest_asyncio
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event
+from sqlalchemy import event
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -26,21 +28,27 @@ def client(session: Session) -> Generator[TestClient]:
     app.dependency_overrides.clear()
 
 
-@pytest.fixture
-def session() -> Generator[Session]:
-    engine = create_engine(
-        'sqlite:///:memory:',
+@pytest_asyncio.fixture
+async def session() -> AsyncGenerator[AsyncSession]:
+    engine = create_async_engine(
+        'sqlite+aiosqlite:///:memory:',
         connect_args={'check_same_thread': False},
         poolclass=StaticPool,
     )
 
-    table_registry.metadata.create_all(engine)
+    # engine.begin() inicia um transação assíncrona com o banco de dados
+    async with engine.begin() as conn:
+        # inicia a criação de tabelas, uma operação síncrona por natureza
+        # Esse processo assegura que a criação das tabelas ocorra de forma
+        # não bloqueante.
+        await conn.run_sync(table_registry.metadata.create_all)
 
-    with Session(engine) as session:
+    async with AsyncSession(engine, expire_on_commit=False) as session:
         yield session
 
-    table_registry.metadata.drop_all(engine)  # elimina todas as tabelas
-    engine.dispose()  # fecha a conexão com o banco de dados
+    async with engine.begin() as conn:
+        # elimina todas as tabelas
+        await conn.run_sync(table_registry.metadata.drop_all)
 
 
 @pytest.fixture
@@ -68,8 +76,8 @@ def _mock_db_time(*, model: Any, time: datetime = datetime(2024, 1, 1)):
     event.remove(model, 'before_insert', fake_time_hook)  # type: ignore
 
 
-@pytest.fixture
-def user(session: Session) -> User:
+@pytest_asyncio.fixture
+async def user(session: AsyncSession) -> User:
     plain_password = 'test_secret'
 
     user = User(
@@ -79,8 +87,8 @@ def user(session: Session) -> User:
     )
 
     session.add(user)
-    session.commit()
-    session.refresh(user)
+    await session.commit()
+    await session.refresh(user)
 
     return user
 
