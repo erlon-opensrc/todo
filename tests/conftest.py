@@ -11,6 +11,7 @@ from sqlalchemy.pool import StaticPool
 from todo.app import app
 from todo.database import get_session
 from todo.models import User, table_registry
+from todo.security import get_password_hash
 
 
 @pytest.fixture
@@ -69,10 +70,25 @@ def _mock_db_time(*, model: Any, time: datetime = datetime(2024, 1, 1)):
 
 @pytest.fixture
 def user(session: Session) -> User:
-    user = User(username='Test', email='test@test.com', password='test_secret')
+    plain_password = 'test_secret'
+
+    user = User(
+        username='Test',
+        email='test@test.com',
+        password=get_password_hash(plain_password),
+    )
 
     session.add(user)
     session.commit()
     session.refresh(user)
 
     return user
+
+
+@pytest.fixture
+def token(client: TestClient, user: User) -> str:
+    response = client.post(
+        '/token', data={'username': user.email, 'password': 'test_secret'}
+    )
+
+    return response.json()['access_token']
