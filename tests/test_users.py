@@ -67,10 +67,10 @@ def test_read_current_user(client: TestClient, user: User, token: str):
 
 
 def test_read_current_user_forbidden(
-    client: TestClient, user: User, token: str
+    client: TestClient, other_user: User, token: str
 ):
     response = client.get(
-        url=f'/users/{user.id + 1}',
+        url=f'/users/{other_user.id}',
         headers={'Authorization': f'Bearer {token}'},
     )
 
@@ -97,12 +97,23 @@ def test_update_user(client: TestClient, user: User, token: str):
     }
 
 
-def test_update_user_forbidden(client: TestClient, user: User, token: str):
-    user_schema = UserSchema.model_validate(user).model_dump()
+def test_update_user_forbidden(
+    client: TestClient, other_user: User, token: str
+):
+    #  simular um cenário onde o usuário associado ao token (autenticado)
+    # está tentando realizar uma ação sobre outro usuário,
+    # representado pela fixture other_user.
+    # Ao usar a other_user, garantimos que o id do usuário que estamos tentando
+    # modificar ou deletar não seja o mesmo do usuário associado ao token,
+    # mas que ainda assim exista no banco de dados.
 
     response = client.put(
-        url=f'/users/{user.id + 1}',
-        json=user_schema,
+        url=f'/users/{other_user.id}',
+        json={
+            'username': 'Bob',
+            'email': 'bob@example.com',
+            'password': 'myNewPassword',
+        },
         headers={'Authorization': f'Bearer {token}'},
     )
 
@@ -111,13 +122,16 @@ def test_update_user_forbidden(client: TestClient, user: User, token: str):
 
 
 def test_update_user_integrity_error(
-    client: TestClient, user: User, token: str
+    client: TestClient,
+    user: User,
+    token: str,
+    other_user: User,
 ):
     new_user = UserSchema(
-        username='Bob', email='bob@example.com', password='secret'
+        username=other_user.username,
+        email='bob@example.com',
+        password='secret',
     ).model_dump()
-
-    client.post(url='/users', json=new_user)
 
     response = client.put(
         url=f'/users/{user.id}',
@@ -138,9 +152,11 @@ def test_delete_user(client: TestClient, user: User, token: str):
     assert response.json() == {'message': 'User deleted'}
 
 
-def test_delete_user_forbidden(client: TestClient, user: User, token: str):
+def test_delete_user_forbidden(
+    client: TestClient, other_user: User, token: str
+):
     response = client.delete(
-        url=f'/users/{user.id + 1}',
+        url=f'/users/{other_user.id}',
         headers={'Authorization': f'Bearer {token}'},
     )
 

@@ -4,6 +4,7 @@ from typing import Any, AsyncGenerator, Generator
 
 import pytest
 import pytest_asyncio
+from factory import Factory, LazyAttribute, Sequence  # type: ignore
 from fastapi.testclient import TestClient
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -80,15 +81,28 @@ def _mock_db_time(*, model: Any, time: datetime = datetime(2024, 1, 1)):
 async def user(session: AsyncSession) -> User:
     plain_password = 'test_secret'
 
-    user = User(
-        username='Test',
-        email='test@test.com',
-        password=get_password_hash(plain_password),
-    )
+    user = UserFactory(password=get_password_hash(plain_password))
 
     session.add(user)
     await session.commit()
     await session.refresh(user)
+
+    user.clean_password = plain_password
+
+    return user
+
+
+@pytest_asyncio.fixture
+async def other_user(session: AsyncSession) -> User:
+    plain_password = 'test_test'
+
+    user = UserFactory(password=get_password_hash(plain_password))
+
+    session.add(user)
+    await session.commit()
+    await session.refresh(user)
+
+    user.clean_password = plain_password
 
     return user
 
@@ -100,3 +114,13 @@ def token(client: TestClient, user: User) -> str:
     )
 
     return response.json()['access_token']
+
+
+# classe usada em testes para criar instâncias de User com dados predefinidos.
+class UserFactory(Factory[User]):
+    class Meta:  # type: ignore
+        model = User  # é a classe que será retornada pela fábrica
+
+    username = Sequence(lambda n: f'test{n}')  # type: ignore
+    email = LazyAttribute(lambda obj: f'{obj.username}@test.com')  # type: ignore
+    password = LazyAttribute(lambda obj: f'{obj.username}@example.com')  # type: ignore
